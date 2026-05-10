@@ -4,6 +4,18 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SheetFilter — Excel Filter Tool</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0d0f14" id="meta-theme-color" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="SheetFilter" />
+<!-- Inline SVG icon encoded as data URI for apple-touch-icon -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='36' fill='%230d0f14'/%3E%3Crect x='28' y='28' width='136' height='136' rx='18' fill='none' stroke='%234ade80' stroke-width='8'/%3E%3Ctext x='96' y='118' font-family='monospace' font-size='72' font-weight='bold' fill='%234ade80' text-anchor='middle'%3ESF%3C/text%3E%3C/svg%3E" />
+<meta name="description" content="Filter Excel and CSV files by column — works offline, nothing leaves your device." />
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap');
@@ -29,6 +41,29 @@
     --radius-sm: 6px;
   }
 
+  /* ── light mode overrides ── */
+  html.light {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface2: #eef1f6;
+    --border: #d8dde8;
+    --border2: #b8c0d0;
+    --text: #1a1d27;
+    --muted: #6b7280;
+    --accent: #16a34a;
+    --accent-dim: rgba(22,163,74,0.10);
+    --accent-border: rgba(22,163,74,0.30);
+    --danger: #dc2626;
+    --danger-dim: rgba(220,38,38,0.08);
+    --info: #2563eb;
+    --info-dim: rgba(37,99,235,0.08);
+  }
+
+  /* smooth theme transitions */
+  *, *::before, *::after {
+    transition: background-color 0.2s, border-color 0.2s, color 0.15s;
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -40,8 +75,46 @@
     line-height: 1.6;
   }
 
-  /* ── header ── */
-  header {
+  /* ── theme toggle ── */
+  .theme-toggle {
+    margin-left: auto;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    transition: border-color 0.15s, background 0.15s, transform 0.2s;
+    flex-shrink: 0;
+  }
+  .theme-toggle:hover { border-color: var(--accent); transform: rotate(20deg); }
+
+  /* ── install banner ── */
+  #install-banner {
+    display: none;
+    align-items: center; gap: 10px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    margin-bottom: 14px;
+    font-size: 13px;
+  }
+  #install-banner.show { display: flex; }
+  #install-banner .ib-text { flex: 1; color: var(--text); }
+  #install-banner .ib-text strong { color: var(--accent); }
+  #btn-install {
+    background: var(--accent); border: none; color: #0d1a10;
+    padding: 7px 16px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 600; font-family: var(--sans);
+    cursor: pointer; flex-shrink: 0;
+  }
+  #btn-dismiss-install {
+    background: none; border: none; color: var(--muted);
+    font-size: 18px; cursor: pointer; flex-shrink: 0; line-height: 1;
+  }
     border-bottom: 1px solid var(--border);
     padding: 18px 24px;
     display: flex;
@@ -471,10 +544,18 @@
     <h1>SheetFilter</h1>
     <p>Filter Excel & CSV files in your browser</p>
   </div>
-  <span class="header-badge">client-side only</span>
+  <span class="header-badge" style="display:none;"></span><!-- removed -->
+  <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle theme">🌙</button>
 </header>
 
 <main>
+
+  <!-- PWA install banner -->
+  <div id="install-banner">
+    <div class="ib-text">📲 <strong>Install SheetFilter</strong> — add to your home screen for offline use</div>
+    <button id="btn-install">Install</button>
+    <button id="btn-dismiss-install" title="Dismiss">✕</button>
+  </div>
 
   <!-- STEP 1: UPLOAD -->
   <div class="step active" id="step-upload">
@@ -1038,6 +1119,80 @@ document.getElementById('btn-dl-csv').addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(a.href);
 });
+
+// ── Theme Toggle ───────────────────────────────────────────────────────────
+const html = document.documentElement;
+const toggleBtn = document.getElementById('theme-toggle');
+const metaTheme = document.getElementById('meta-theme-color');
+
+function applyTheme(mode) {
+  if (mode === 'light') {
+    html.classList.add('light');
+    toggleBtn.textContent = '☀️';
+    toggleBtn.title = 'Switch to dark mode';
+    metaTheme.content = '#f4f6f9';
+  } else {
+    html.classList.remove('light');
+    toggleBtn.textContent = '🌙';
+    toggleBtn.title = 'Switch to light mode';
+    metaTheme.content = '#0d0f14';
+  }
+  localStorage.setItem('sf-theme', mode);
+}
+
+// Load saved preference or system preference
+(function() {
+  const saved = localStorage.getItem('sf-theme');
+  if (saved) {
+    applyTheme(saved);
+  } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+    applyTheme('light');
+  }
+})();
+
+toggleBtn.addEventListener('click', () => {
+  applyTheme(html.classList.contains('light') ? 'dark' : 'light');
+});
+
+// ── PWA: Service Worker + Install Prompt ───────────────────────────────────
+let deferredInstallPrompt = null;
+const installBanner = document.getElementById('install-banner');
+const btnInstall = document.getElementById('btn-install');
+const btnDismiss = document.getElementById('btn-dismiss-install');
+
+// Capture the browser's install prompt
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Only show if user hasn't dismissed before
+  if (!localStorage.getItem('sf-install-dismissed')) {
+    installBanner.classList.add('show');
+  }
+});
+
+btnInstall.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installBanner.classList.remove('show');
+  if (outcome === 'accepted') localStorage.setItem('sf-install-dismissed', '1');
+});
+
+btnDismiss.addEventListener('click', () => {
+  installBanner.classList.remove('show');
+  localStorage.setItem('sf-install-dismissed', '1');
+});
+
+// Hide banner if already installed (standalone mode)
+if (window.matchMedia('(display-mode: standalone)').matches) {
+  installBanner.classList.remove('show');
+}
+
+// Register service worker (sw.js must be in same directory)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
