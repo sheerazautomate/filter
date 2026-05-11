@@ -450,6 +450,34 @@
   footer a { color: var(--muted); text-decoration: none; }
   footer a:hover { color: var(--accent); }
 
+  /* ── share target toast ── */
+  #share-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--accent);
+    color: #0d1a10;
+    padding: 11px 20px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--sans);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    z-index: 999;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+    opacity: 0;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  #share-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+
   /* animations */
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   .step.active { animation: fadeIn 0.2s ease; }
@@ -693,6 +721,8 @@
   SheetFilter &mdash; 100% client-side &middot; no uploads &middot; no tracking &middot;
   <a href="https://github.com/SheetJS/sheetjs" target="_blank" rel="noopener">powered by SheetJS</a>
 </footer>
+
+<div id="share-toast">📂 <span id="share-toast-text">File received via Share</span></div>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
@@ -1192,6 +1222,43 @@ if (window.matchMedia('(display-mode: standalone)').matches) {
 // Register service worker (sw.js must be in same directory)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ── Web Share Target: receive file posted by the SW ────────────────────────
+function showShareToast(filename) {
+  const toast = document.getElementById('share-toast');
+  document.getElementById('share-toast-text').textContent = `"${filename}" loaded via Share`;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3500);
+}
+
+function handleSharedArrayBuffer(filename, buffer) {
+  // Synthesise a File object from the ArrayBuffer so handleFile() works as-is
+  const ext = filename.split('.').pop().toLowerCase();
+  const mimeMap = {
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls:  'application/vnd.ms-excel',
+    csv:  'text/csv'
+  };
+  const file = new File([buffer], filename, { type: mimeMap[ext] || '' });
+  handleFile(file);
+  showShareToast(filename);
+}
+
+// Listen for messages from the service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SHARE_TARGET_FILE') {
+      handleSharedArrayBuffer(event.data.name, event.data.buffer);
+    }
+  });
+
+  // Tell the SW we're ready — it may have a file buffered from a share redirect
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.active) {
+      reg.active.postMessage({ type: 'SHARE_TARGET_READY' });
+    }
+  });
 }
 </script>
 </body>
