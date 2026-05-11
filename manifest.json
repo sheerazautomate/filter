@@ -2,7 +2,7 @@
   "name": "SheetFilter — Excel Filter Tool",
   "short_name": "SheetFilter",
   "description": "Filter Excel and CSV files by column. Works offline. Nothing leaves your device.",
-  "start_url": "https://sheerazautomate.github.io/filter/",
+  "start_url": "https://sheerazautomate.github.io/filter/index.html",
   "scope": "https://sheerazautomate.github.io/filter/",
   "display": "standalone",
   "orientation": "any",
@@ -29,11 +29,11 @@
       "name": "Open SheetFilter",
       "short_name": "Open",
       "description": "Open the filter tool",
-      "url": "https://YOUR_USERNAME.github.io/YOUR_REPO/index.html"
+      "url": "https://sheerazautomate.github.io/filter/index.html"
     }
   ],
   "share_target": {
-    "action": "https://sheerazautomate.github.io/filter/",
+    "action": "https://sheerazautomate.github.io/filter/index.html",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
