@@ -868,11 +868,12 @@ function renderSheetSelector() {
   } else {
     hint.textContent = `${names.length} sheets found — tap one to load it.`;
     grid.innerHTML = names.map(name => {
-      // Count data rows for preview
       const sheet = workbook.Sheets[name];
       const ref = sheet['!ref'];
       const rowCount = ref ? XLSX.utils.decode_range(ref).e.r : 0;
-      return `<button class="sheet-chip" onclick="loadSheet(${JSON.stringify(name)})" id="sc-${CSS.escape(name)}">
+      // Escape single quotes in name for the onclick attribute
+      const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return `<button class="sheet-chip" data-sheet="${escHtml(name)}" onclick="loadSheet('${safeName}')">
         📄 ${escHtml(name)}
         <span class="sheet-rows">~${fmt(rowCount)} rows</span>
       </button>`;
@@ -895,7 +896,7 @@ function loadSheet(sheetName) {
 
   // Highlight active sheet chip
   document.querySelectorAll('.sheet-chip').forEach(c => c.classList.remove('active'));
-  const activeChip = document.getElementById('sc-' + CSS.escape(sheetName));
+  const activeChip = document.querySelector(`.sheet-chip[data-sheet="${CSS.escape(sheetName)}"]`);
   if (activeChip) activeChip.classList.add('active');
 
   // Mark sheet step done
