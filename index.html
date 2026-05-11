@@ -490,6 +490,34 @@
     border: 1px solid rgba(96,165,250,0.25);
   }
 
+  /* ── sheet selector ── */
+  .sheet-grid {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+  }
+  .sheet-chip {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-family: var(--mono);
+    padding: 6px 14px; border-radius: var(--radius-sm);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; transition: all 0.15s;
+    user-select: none;
+  }
+  .sheet-chip:hover { border-color: var(--border2); color: var(--text); }
+  .sheet-chip.active {
+    background: var(--accent-dim); border-color: var(--accent-border);
+    color: var(--accent); font-weight: 500;
+  }
+  .sheet-chip .sheet-rows {
+    font-size: 10px; color: var(--muted); font-family: var(--mono);
+    background: var(--surface); padding: 1px 5px; border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .sheet-chip.active .sheet-rows { border-color: var(--accent-border); color: var(--accent); }
+  .single-sheet-note {
+    font-size: 12px; color: var(--muted); font-family: var(--mono);
+    padding: 8px 0; display: flex; align-items: center; gap: 6px;
+  }
+
   /* ── header row picker ── */
   .row-picker-wrap { margin-top: 10px; }
   .row-picker-label {
@@ -615,10 +643,22 @@
     </div>
   </div>
 
-  <!-- STEP 2: HEADERS -->
-  <div class="step" id="step-headers">
+  <!-- STEP 2: SHEET SELECTOR -->
+  <div class="step" id="step-sheet">
     <div class="step-head">
       <div class="step-num">2</div>
+      <div class="step-title">Select sheet</div>
+    </div>
+    <div class="step-body">
+      <p class="hint" id="sheet-hint">Choose which sheet to work with.</p>
+      <div class="sheet-grid" id="sheet-grid"></div>
+    </div>
+  </div>
+
+  <!-- STEP 3: HEADERS -->
+  <div class="step" id="step-headers">
+    <div class="step-head">
+      <div class="step-num">3</div>
       <div class="step-title">Detected columns</div>
     </div>
     <div class="step-body">
@@ -638,10 +678,10 @@
     </div>
   </div>
 
-  <!-- STEP 3: FILTERS -->
+  <!-- STEP 4: FILTERS -->
   <div class="step" id="step-filters">
     <div class="step-head">
-      <div class="step-num">3</div>
+      <div class="step-num">4</div>
       <div class="step-title">Set filter rules</div>
     </div>
     <div class="step-body">
@@ -659,10 +699,10 @@
     </div>
   </div>
 
-  <!-- STEP 4: RESULTS -->
+  <!-- STEP 5: RESULTS -->
   <div class="step" id="step-results" style="display:none;">
     <div class="step-head">
-      <div class="step-num">4</div>
+      <div class="step-num">5</div>
       <div class="step-title">Filtered results</div>
     </div>
     <div class="step-body">
@@ -685,10 +725,10 @@
     </div>
   </div>
 
-  <!-- STEP 5: DOWNLOAD -->
+  <!-- STEP 6: DOWNLOAD -->
   <div class="step" id="step-download" style="display:none;">
     <div class="step-head">
-      <div class="step-num">5</div>
+      <div class="step-num">6</div>
       <div class="step-title">Download filtered file</div>
     </div>
     <div class="step-body">
@@ -727,7 +767,7 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let workbook = null;
-let rawRows = [];       // all rows as arrays (up to sheet end)
+let rawRows = [];       // all rows as arrays for current sheet
 let allRows = [];       // data rows as objects after header selection
 let headers = [];
 let filteredRows = [];
@@ -735,6 +775,7 @@ let filterLogic = 'and';
 let filterCount = 0;
 let headerRowIndex = 0; // 0-based index into rawRows
 let customFileName = '';  // user override for download name
+let activeSheet = '';   // currently selected sheet name
 
 const OPS = [
   { val: 'contains',    label: 'contains' },
@@ -792,33 +833,92 @@ function handleFile(file) {
   reader.onload = function(e) {
     try {
       workbook = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      if (!rawRows || rawRows.length < 1) {
-        showErr('err-upload', 'File appears empty or has no data rows.');
-        return;
-      }
-      // Default: use row 0 as header
-      applyHeaderRow(0);
-      // Show file info
+
+      // Show file info bar
       document.getElementById('upload-zone-wrap').style.display = 'none';
       document.getElementById('file-info-wrap').style.display = 'block';
       document.getElementById('file-icon').textContent = ext === 'csv' ? '📋' : '📊';
       document.getElementById('file-name').textContent = file.name;
-      document.getElementById('file-meta').textContent =
-        `${fmt(allRows.length)} rows · ${headers.length} columns · sheet: ${sheetName}`;
+
       setStep('step-upload', true);
-      renderHeaders();
-      renderRowPicker();
-      setStep('step-headers', false);
-      setStep('step-filters', false);
-      renderFilters();
+
+      // Render sheet selector (Step 2)
+      renderSheetSelector();
+      setStep('step-sheet', false);
+
+      // Auto-load the first sheet
+      loadSheet(workbook.SheetNames[0]);
+
     } catch(err) {
       showErr('err-upload', 'Could not read file: ' + err.message);
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ── Sheet Loading ───────────────────────────────────────────────────────────
+function renderSheetSelector() {
+  const names = workbook.SheetNames;
+  const grid = document.getElementById('sheet-grid');
+  const hint = document.getElementById('sheet-hint');
+
+  if (names.length === 1) {
+    hint.textContent = 'Only one sheet found — loaded automatically.';
+    grid.innerHTML = `<div class="single-sheet-note">📄 ${escHtml(names[0])}</div>`;
+  } else {
+    hint.textContent = `${names.length} sheets found — tap one to load it.`;
+    grid.innerHTML = names.map(name => {
+      // Count data rows for preview
+      const sheet = workbook.Sheets[name];
+      const ref = sheet['!ref'];
+      const rowCount = ref ? XLSX.utils.decode_range(ref).e.r : 0;
+      return `<button class="sheet-chip" onclick="loadSheet(${JSON.stringify(name)})" id="sc-${CSS.escape(name)}">
+        📄 ${escHtml(name)}
+        <span class="sheet-rows">~${fmt(rowCount)} rows</span>
+      </button>`;
+    }).join('');
+  }
+}
+
+function loadSheet(sheetName) {
+  activeSheet = sheetName;
+  headerRowIndex = 0;
+  customFileName = '';
+
+  const sheet = workbook.Sheets[sheetName];
+  rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  if (!rawRows || rawRows.length < 1) {
+    showErr('err-upload', `Sheet "${sheetName}" appears to be empty.`);
+    return;
+  }
+
+  // Highlight active sheet chip
+  document.querySelectorAll('.sheet-chip').forEach(c => c.classList.remove('active'));
+  const activeChip = document.getElementById('sc-' + CSS.escape(sheetName));
+  if (activeChip) activeChip.classList.add('active');
+
+  // Mark sheet step done
+  setStep('step-sheet', true);
+
+  applyHeaderRow(0);
+
+  // Update file meta
+  document.getElementById('file-meta').textContent =
+    `${fmt(allRows.length)} rows · ${headers.length} columns · sheet: ${sheetName}`;
+
+  renderHeaders();
+  renderRowPicker();
+  setStep('step-headers', false);
+  setStep('step-filters', false);
+
+  // Reset filters and downstream steps
+  document.getElementById('filter-rows').innerHTML = '';
+  filterCount = 0;
+  renderFilters();
+  document.getElementById('step-results').style.display = 'none';
+  document.getElementById('step-download').style.display = 'none';
+  clearErr('err-filter');
 }
 
 function applyHeaderRow(idx) {
@@ -842,14 +942,18 @@ function applyHeaderRow(idx) {
 document.getElementById('btn-change').addEventListener('click', resetAll);
 function resetAll() {
   workbook = null; rawRows = []; allRows = []; headers = [];
-  filteredRows = []; filterCount = 0; headerRowIndex = 0; customFileName = '';
+  filteredRows = []; filterCount = 0; headerRowIndex = 0;
+  customFileName = ''; activeSheet = '';
   document.getElementById('file-input').value = '';
   document.getElementById('upload-zone-wrap').style.display = '';
   document.getElementById('file-info-wrap').style.display = 'none';
+  document.getElementById('sheet-grid').innerHTML = '';
   document.getElementById('header-grid').innerHTML = '';
   document.getElementById('row-picker-table').innerHTML = '';
   document.getElementById('filter-rows').innerHTML = '';
   document.getElementById('selected-row-badge').style.display = 'none';
+  document.getElementById('step-sheet').className = 'step';
+  document.getElementById('step-sheet').style.display = '';
   document.getElementById('step-headers').className = 'step';
   document.getElementById('step-headers').style.display = '';
   document.getElementById('step-filters').className = 'step';
@@ -1071,6 +1175,7 @@ function renderResults(rules) {
   }
 
   setStep('step-upload', true);
+  setStep('step-sheet', true);
   setStep('step-headers', true);
   setStep('step-filters', true);
   setStep('step-results', false);
@@ -1087,13 +1192,16 @@ function renderResults(rules) {
 // ── Filename ───────────────────────────────────────────────────────────────
 function buildSmartName(rules) {
   const base = document.getElementById('file-name').textContent.replace(/\.[^.]+$/, '');
+  // Include sheet name only if the workbook has more than one sheet
+  const sheetPart = (workbook && workbook.SheetNames.length > 1)
+    ? '_' + activeSheet.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 20)
+    : '';
   const parts = rules.map(r => {
     const val = ['empty','not_empty'].includes(r.op) ? r.op.replace('_',' ') : r.val;
-    // sanitize: keep alphanumeric, dash, underscore
     return (r.col + '_' + val).replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g,'_').slice(0, 30);
   });
-  const suffix = parts.slice(0, 3).join('-'); // max 3 filter parts in name
-  return base + '_' + suffix;
+  const suffix = parts.slice(0, 3).join('-');
+  return base + sheetPart + '_' + suffix;
 }
 
 function getDownloadName() {
