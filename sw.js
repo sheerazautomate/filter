@@ -1,7 +1,7 @@
-// SheetFilter Service Worker v2
+// SheetFilter Service Worker v3
 // Caches app shell for offline use + handles Web Share Target POST requests.
 
-const CACHE = 'sheetfilter-v2';
+const CACHE = 'sheetfilter-v3';
 
 const PRECACHE = [
   './index.html',
